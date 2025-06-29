@@ -42,24 +42,52 @@ interface DeveloperWithDistance extends Developer {
 }
 
 export default function SearchPage() {
-  const [searchTech, setSearchTech] = useState("");
-  const [searchDistance, setSearchDistance] = useState("10");
-  const [loading, setLoading] = useState(false);
+  const [searchTech, setSearchTech] = useState<string>("");
+  const [searchDistance, setSearchDistance] = useState<string>("10");
+  const [loading, setLoading] = useState<boolean>(false);
   const [userLocation, setUserLocation] = useState<{
     latitude: number;
     longitude: number;
   } | null>(null);
-  const [locationLoading, setLocationLoading] = useState(false);
-  const [developers, setDevelopers] = useState<DeveloperWithDistance[]>([]);
+  const [locationLoading, setLocationLoading] = useState<boolean>(false);
+  const [filteredDevelopers, setFilteredDevelopers] = useState<DeveloperWithDistance[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [apiStatus, setApiStatus] = useState<"checking" | "online" | "offline">(
     "checking"
+  );
+  const [debouncedTech, setDebouncedTech] = useState<string>("");
+  const [allDevelopers, setAllDevelopers] = useState<DeveloperWithDistance[]>(
+    []
   );
 
   useEffect(() => {
     checkApiStatus();
     handleGetLocation();
   }, [searchDistance]);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedTech(searchTech);
+    }, 500); // meio segundo de espera após parar de digitar
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [searchTech]);
+
+  useEffect(() => {
+    if (!debouncedTech) {
+      // Se o filtro está vazio, mostra todos
+      setFilteredDevelopers(allDevelopers);
+    } else {
+      const filtered = allDevelopers.filter((dev) =>
+        dev.techs.some((tech) =>
+          tech.toLowerCase().includes(debouncedTech.toLowerCase())
+        )
+      );
+      setFilteredDevelopers(filtered);
+    }
+  }, [debouncedTech, allDevelopers]);
 
   const checkApiStatus = async () => {
     setApiStatus("checking");
@@ -130,11 +158,12 @@ export default function SearchPage() {
     tech?: string,
     distance?: string
   ) => {
-    const searchLocation = location || userLocation;
-    const searchTechnology = tech !== undefined ? tech : searchTech;
-    const searchRadius = distance !== undefined ? distance : searchDistance;
+    const resolvedLocation = location ?? userLocation;
+    // const resolvedTech = tech ?? searchTech;
+    const resolvedTech = tech ?? debouncedTech;
+    const resolvedDistance = distance ?? searchDistance;
 
-    if (!searchLocation) {
+    if (!resolvedLocation) {
       toast({
         title: "Localização necessária",
         description:
@@ -151,25 +180,24 @@ export default function SearchPage() {
       console.log("Iniciando busca de desenvolvedores...");
 
       const devs = await searchDevelopers({
-        latitude: searchLocation.latitude,
-        longitude: searchLocation.longitude,
-        distance: Number.parseInt(searchRadius),
-        techs: searchTechnology,
+        latitude: resolvedLocation.latitude,
+        longitude: resolvedLocation.longitude,
+        distance: Number.parseInt(resolvedDistance),
+        techs: "", // Sempre busca todos
       });
 
       const devsWithDistance = addDistanceToDevs(
         devs,
-        searchLocation.latitude,
-        searchLocation.longitude
+        resolvedLocation.latitude,
+        resolvedLocation.longitude
       );
 
-      setDevelopers(devsWithDistance);
+      setAllDevelopers(devsWithDistance);
+      setFilteredDevelopers(devsWithDistance);
 
       toast({
         title: "Busca concluída",
-        description: `Encontrados ${devsWithDistance.length} desenvolvedores${
-          searchTechnology ? ` com "${searchTechnology}"` : ""
-        } em um raio de ${searchRadius}km.`,
+        description: `Encontrados ${devsWithDistance.length} desenvolvedores em um raio de ${resolvedDistance}km.`,
       });
     } catch (error) {
       console.error("Erro na busca:", error);
@@ -198,7 +226,6 @@ export default function SearchPage() {
 
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await handleSearch();
   };
 
   return (
@@ -345,12 +372,24 @@ export default function SearchPage() {
                     </Button>
                   )}
                 </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setSearchTech("");
+                    setSearchDistance("10");
+                    setFilteredDevelopers(allDevelopers);
+                  }}
+                  disabled={loading}
+                >
+                  Resetar filtros
+                </Button>
               </form>
             </CardContent>
           </Card>
           <div className="space-y-4">
             <h2 className="text-lg font-medium">
-              Desenvolvedores Encontrados ({developers.length})
+              Desenvolvedores Encontrados ({filteredDevelopers.length})
               {searchDistance && ` - Raio de ${searchDistance}km`}
             </h2>
 
@@ -359,7 +398,7 @@ export default function SearchPage() {
                 <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
                 <p className="text-gray-500">Buscando desenvolvedores...</p>
               </div>
-            ) : developers.length === 0 ? (
+            ) : filteredDevelopers.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 {searchTech ? (
                   <div>
@@ -374,7 +413,7 @@ export default function SearchPage() {
                 )}
               </div>
             ) : (
-              developers.map((dev, index) => (
+              filteredDevelopers.map((dev, index) => (
                 <Card
                   key={`${dev.githubUsername}-${index}`}
                   className="overflow-hidden"
@@ -436,7 +475,7 @@ export default function SearchPage() {
               {userLocation ? (
                 <DeveloperMap
                   userLocation={userLocation}
-                  developers={developers}
+                  developers={filteredDevelopers}
                   searchRadius={Number.parseInt(searchDistance)}
                 />
               ) : (
