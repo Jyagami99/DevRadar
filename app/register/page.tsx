@@ -118,40 +118,40 @@ export default function RegisterPage() {
             longitude: -46.6333,
           };
           setLocation(defaultLocation);
-          // console.error(
-          //   "Erro ao obter localização:",
-          //   "Code =",
-          //   error.code,
-          //   "| Message =",
-          //   error.message
-          // );
+          console.error(
+            "Erro ao obter localização:",
+            "Code =",
+            error.code,
+            "| Message =",
+            error.message
+          );
 
           setLocationLoading(false);
 
-          // let errorMessage = "Não foi possível obter sua localização.";
+          let errorMessage = "Não foi possível obter sua localização.";
 
-          // switch (error.code) {
-          //   case 1: // PERMISSION_DENIED
-          //     errorMessage =
-          //       "Permissão negada para acessar localização. Por favor, permita o acesso nas configurações do navegador.";
-          //     break;
-          //   case 2: // POSITION_UNAVAILABLE
-          //     errorMessage =
-          //       "Informação de localização indisponível. Tente novamente mais tarde.";
-          //     break;
-          //   case 3: // TIMEOUT
-          //     errorMessage =
-          //       "Tempo para obter localização esgotado. Tente novamente.";
-          //     break;
-          //   default:
-          //     errorMessage = "Erro desconhecido ao obter localização.";
-          // }
+          switch (error.code) {
+            case 1:
+              errorMessage =
+                "Permissão negada para acessar localização. Por favor, permita o acesso nas configurações do navegador.";
+              break;
+            case 2:
+              errorMessage =
+                "Informação de localização indisponível. Tente novamente mais tarde.";
+              break;
+            case 3:
+              errorMessage =
+                "Tempo para obter localização esgotado. Tente novamente.";
+              break;
+            default:
+              errorMessage = "Erro desconhecido ao obter localização.";
+          }
 
-          // toast({
-          //   title: "Erro de localização",
-          //   description: errorMessage,
-          //   variant: "destructive",
-          // });
+          toast({
+            title: "Erro de localização",
+            description: errorMessage,
+            variant: "destructive",
+          });
         },
         {
           enableHighAccuracy: true,

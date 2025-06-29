@@ -5,15 +5,12 @@ import { DebugClient } from "./client";
 export default async function DebugPage() {
   const session = await getServerSession();
 
-  // Obter a URL base para a aplicação
   const baseUrl = process.env.NEXTAUTH_URL || "Não definido";
 
-  // Verificar se o GitHub OAuth está configurado corretamente
   const isGitHubConfigured = !!(
     process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET
   );
 
-  // Verificar se o NextAuth secret está definido
   const isSecretSet = !!process.env.NEXTAUTH_SECRET;
 
   return (

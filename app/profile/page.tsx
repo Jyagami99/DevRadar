@@ -123,14 +123,14 @@ export default function ProfilePage() {
         (error) => {
           setLocation(defaultLocation);
 
-          // console.error("Erro ao obter localização:", error)
-          // setLocationLoading(false);
-          // toast({
-          //   title: "Erro de localização",
-          //   description:
-          //     "Não foi possível obter sua localização. Verifique as permissões do navegador.",
-          //   variant: "destructive",
-          // });
+          console.error("Erro ao obter localização:", error)
+          setLocationLoading(false);
+          toast({
+            title: "Erro de localização",
+            description:
+              "Não foi possível obter sua localização. Verifique as permissões do navegador.",
+            variant: "destructive",
+          });
         }
       );
     } else {

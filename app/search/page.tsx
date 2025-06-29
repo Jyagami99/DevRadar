@@ -68,7 +68,7 @@ export default function SearchPage() {
   useEffect(() => {
     const handler = setTimeout(() => {
       setDebouncedTech(searchTech);
-    }, 500); // meio segundo de espera após parar de digitar
+    }, 500);
 
     return () => {
       clearTimeout(handler);
@@ -77,7 +77,6 @@ export default function SearchPage() {
 
   useEffect(() => {
     if (!debouncedTech) {
-      // Se o filtro está vazio, mostra todos
       setFilteredDevelopers(allDevelopers);
     } else {
       const filtered = allDevelopers.filter((dev) =>
@@ -116,17 +115,17 @@ export default function SearchPage() {
           handleSearch(location);
         },
         (error) => {
-          // console.error("Erro ao obter localização:", error);
+          console.error("Erro ao obter localização:", error);
           setLocationLoading(false);
-          // setError(
-          //   "Não foi possível obter sua localização. Verifique as permissões do navegador."
-          // );
-          // toast({
-          //   title: "Erro de localização",
-          //   description:
-          //     "Não foi possível obter sua localização. Usando localização padrão (São Paulo).",
-          //   variant: "destructive",
-          // });
+          setError(
+            "Não foi possível obter sua localização. Verifique as permissões do navegador."
+          );
+          toast({
+            title: "Erro de localização",
+            description:
+              "Não foi possível obter sua localização. Usando localização padrão (São Paulo).",
+            variant: "destructive",
+          });
           const defaultLocation = {
             latitude: -23.5505,
             longitude: -46.6333,
@@ -159,7 +158,6 @@ export default function SearchPage() {
     distance?: string
   ) => {
     const resolvedLocation = location ?? userLocation;
-    // const resolvedTech = tech ?? searchTech;
     const resolvedTech = tech ?? debouncedTech;
     const resolvedDistance = distance ?? searchDistance;
 
@@ -183,7 +181,7 @@ export default function SearchPage() {
         latitude: resolvedLocation.latitude,
         longitude: resolvedLocation.longitude,
         distance: Number.parseInt(resolvedDistance),
-        techs: "", // Sempre busca todos
+        techs: "",
       });
 
       const devsWithDistance = addDistanceToDevs(
