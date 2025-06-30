@@ -18,7 +18,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, Loader2, ExternalLink, Save, RefreshCw } from "lucide-react";
+import {
+  MapPin,
+  Loader2,
+  ExternalLink,
+  Save,
+  RefreshCw,
+  Globe,
+} from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import {
   getDeveloperByUsername,
@@ -27,22 +34,29 @@ import {
   type ApiError,
 } from "@/lib/api";
 
+interface LocationData {
+  latitude: number;
+  longitude: number;
+  source: "gps" | "ip" | "database" | "fallback";
+  city?: string;
+  region?: string;
+  country?: string;
+}
+
 export default function ProfilePage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [techs, setTechs] = useState("");
-  const [location, setLocation] = useState<{
-    latitude: number;
-    longitude: number;
-  } | null>(null);
+  const [location, setLocation] = useState<LocationData | null>(null);
   const [locationLoading, setLocationLoading] = useState(false);
   const [developer, setDeveloper] = useState<Developer | null>(null);
 
-  const defaultLocation = {
+  const defaultLocation: LocationData = {
     latitude: -23.5505,
     longitude: -46.6333,
+    source: "fallback",
   };
 
   useEffect(() => {
@@ -74,6 +88,7 @@ export default function ProfilePage() {
       setLocation({
         latitude: devProfile.latitude,
         longitude: devProfile.longitude,
+        source: "database", // Dados vindos do banco de dados
       });
 
       console.log("Perfil carregado:", devProfile);
@@ -104,43 +119,119 @@ export default function ProfilePage() {
     }
   };
 
-  const handleGetLocation = () => {
+  const getLocationFromIP = async (): Promise<LocationData> => {
+    try {
+      console.log("Tentando obter localização via IP...");
+
+      const response = await fetch(
+        "http://ip-api.com/json/?fields=status,message,country,regionName,city,lat,lon"
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data.status === "success") {
+        console.log("Localização obtida via IP:", data);
+
+        return {
+          latitude: data.lat,
+          longitude: data.lon,
+          source: "ip",
+          city: data.city,
+          region: data.regionName,
+          country: data.country,
+        };
+      } else {
+        throw new Error(data.message || "Falha ao obter localização via IP");
+      }
+    } catch (error) {
+      console.error("Erro ao obter localização via IP:", error);
+      throw error;
+    }
+  };
+
+  const handleGetLocation = async () => {
     setLocationLoading(true);
 
     if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setLocation({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-          });
-          setLocationLoading(false);
+      try {
+        const position = await new Promise<GeolocationPosition>(
+          (resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              enableHighAccuracy: true,
+              timeout: 10000, // 10 segundos
+              maximumAge: 60000, // 1 minuto
+            });
+          }
+        );
+
+        const locationData: LocationData = {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          source: "gps",
+        };
+
+        setLocation(locationData);
+        setLocationLoading(false);
+
+        toast({
+          title: "Localização atualizada",
+          description:
+            "Sua localização atual foi detectada via GPS com sucesso.",
+        });
+
+        return;
+      } catch (gpsError) {
+        console.warn("Erro ao obter localização via GPS:", gpsError);
+
+        try {
+          const ipLocation = await getLocationFromIP();
+          setLocation(ipLocation);
+
           toast({
-            title: "Localização atualizada",
-            description: "Sua localização atual foi detectada com sucesso.",
+            title: "Localização atualizada via IP",
+            description: `Localização detectada em ${ipLocation.city}, ${ipLocation.region}, ${ipLocation.country}`,
           });
-        },
-        (error) => {
+        } catch (ipError) {
+          console.error("Erro ao obter localização via IP:", ipError);
+
           setLocation(defaultLocation);
 
-          console.error("Erro ao obter localização:", error)
-          setLocationLoading(false);
           toast({
-            title: "Erro de localização",
+            title: "Localização padrão definida",
             description:
-              "Não foi possível obter sua localização. Verifique as permissões do navegador.",
+              "Não foi possível detectar sua localização. Usando localização padrão (São Paulo, Brasil).",
             variant: "destructive",
           });
         }
-      );
+      }
     } else {
-      setLocationLoading(false);
-      toast({
-        title: "Geolocalização não suportada",
-        description: "Seu navegador não suporta geolocalização.",
-        variant: "destructive",
-      });
+      try {
+        const ipLocation = await getLocationFromIP();
+        setLocation(ipLocation);
+
+        toast({
+          title: "Localização detectada via IP",
+          description: `Geolocalização não suportada. Localização detectada em ${ipLocation.city}, ${ipLocation.region}, ${ipLocation.country}`,
+        });
+      } catch (ipError) {
+        console.error("Erro ao obter localização via IP:", ipError);
+
+        setLocation(defaultLocation);
+
+        toast({
+          title: "Localização padrão definida",
+          description:
+            "Geolocalização não suportada e não foi possível detectar via IP. Usando localização padrão.",
+          variant: "destructive",
+        });
+      }
     }
+
+    setLocationLoading(false);
   };
 
   const processTechs = (techsString: string): string[] => {
@@ -224,6 +315,32 @@ export default function ProfilePage() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const getLocationDisplayText = (location: LocationData): string => {
+    switch (location.source) {
+      case "gps":
+        return "Detectada via GPS";
+      case "ip":
+        return `Via IP: ${location.city}, ${location.region}, ${location.country}`;
+      case "database":
+        return "Localização salva no perfil";
+      case "fallback":
+        return "Localização padrão (São Paulo, Brasil)";
+      default:
+        return "Localização definida";
+    }
+  };
+
+  const getLocationIcon = (source: string) => {
+    switch (source) {
+      case "gps":
+        return <MapPin className="mr-2 h-4 w-4" />;
+      case "ip":
+        return <Globe className="mr-2 h-4 w-4" />;
+      default:
+        return <MapPin className="mr-2 h-4 w-4" />;
     }
   };
 
@@ -382,24 +499,44 @@ export default function ProfilePage() {
                       {locationLoading ? (
                         <>
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Atualizando...
+                          Detectando localização...
                         </>
                       ) : (
                         <>
-                          <MapPin className="mr-2 h-4 w-4" />
+                          {location ? (
+                            getLocationIcon(location.source)
+                          ) : (
+                            <MapPin className="mr-2 h-4 w-4" />
+                          )}
                           {location
                             ? "Atualizar Localização"
-                            : "Compartilhar Localização"}
+                            : "Detectar Localização"}
                         </>
                       )}
                     </Button>
                   </div>
                   {location !== null && (
                     <div className="text-sm text-gray-500 mt-2 p-2 bg-gray-50 rounded">
-                      <strong>Localização atual:</strong>
-                      <br />
-                      Lat: {location.latitude.toFixed(6)}, Lon:{" "}
-                      {location.longitude.toFixed(6)}
+                      <div className="flex items-center justify-between mb-1">
+                        <strong>Localização atual:</strong>
+                        <Badge variant="secondary" className="text-xs">
+                          {location.source === "gps"
+                            ? "GPS"
+                            : location.source === "ip"
+                            ? "IP"
+                            : location.source === "database"
+                            ? "Banco"
+                            : "Padrão"}
+                        </Badge>
+                      </div>
+                      <div className="text-xs">
+                        {getLocationDisplayText(location)}
+                      </div>
+                      <div className="text-xs mt-1">
+                        <strong>Coordenadas:</strong>{" "}
+                        {location.latitude.toFixed(6)},{" "}
+                        {location.longitude.toFixed(6)}
+                      </div>
                     </div>
                   )}
                 </div>
