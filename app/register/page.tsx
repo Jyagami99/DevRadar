@@ -16,7 +16,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { MapPin, Loader2, User, ArrowRight } from "lucide-react";
+import { MapPin, Loader2, User, ArrowRight, Globe } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +28,23 @@ import {
   type RegisterDeveloperRequest,
 } from "@/lib/api";
 
+interface IPLocationResponse {
+  status: string;
+  country: string;
+  countryCode: string;
+  region: string;
+  regionName: string;
+  city: string;
+  zip: string;
+  lat: number;
+  lon: number;
+  timezone: string;
+  isp: string;
+  org: string;
+  as: string;
+  query: string;
+}
+
 export default function RegisterPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
@@ -38,6 +55,10 @@ export default function RegisterPage() {
   const [location, setLocation] = useState<{
     latitude: number;
     longitude: number;
+    source?: "gps" | "ip";
+    city?: string;
+    region?: string;
+    country?: string;
   } | null>(null);
   const [locationLoading, setLocationLoading] = useState(false);
 
@@ -63,22 +84,26 @@ export default function RegisterPage() {
         session.user.username
       );
 
-      await getDeveloperByUsername(session.user.username);
+      const result = await getDeveloperByUsername(session.user.username);
 
-      setExistingProfile(true);
-
-      toast({
-        title: "Perfil já existe!",
-        description:
-          "Você já possui um perfil de desenvolvedor. Redirecionando para seu perfil...",
-      });
-
-      setTimeout(() => {
-        router.push("/profile");
-      }, 2000);
+      // Verifica se o resultado é nulo/undefined ou se é um objeto vazio
+      if (!result || Object.keys(result).length === 0) {
+        console.log("Usuário pode se registrar - perfil não encontrado");
+        setExistingProfile(false);
+      } else {
+        // Perfil encontrado
+        setExistingProfile(true);
+        toast({
+          title: "Perfil já existe!",
+          description:
+            "Você já possui um perfil de desenvolvedor. Redirecionando para seu perfil...",
+        });
+        setTimeout(() => {
+          router.push("/profile");
+        }, 2000);
+      }
     } catch (error) {
       const apiError = error as ApiError;
-
       if (apiError.status === 404) {
         console.log("Usuário pode se registrar - perfil não encontrado");
         setExistingProfile(false);
@@ -96,6 +121,63 @@ export default function RegisterPage() {
     }
   };
 
+  const getLocationByIP = async (): Promise<void> => {
+    try {
+      console.log("Tentando obter localização via IP...");
+
+      const response = await fetch("http://ip-api.com/json/", {
+        method: "GET",
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data: IPLocationResponse = await response.json();
+
+      if (data.status === "success") {
+        setLocation({
+          latitude: data.lat,
+          longitude: data.lon,
+          source: "ip",
+          city: data.city,
+          region: data.regionName,
+          country: data.country,
+        });
+
+        toast({
+          title: "Localização detectada via IP",
+          description: `Localização aproximada detectada: ${data.city}, ${data.regionName}, ${data.country}`,
+        });
+
+        console.log("Localização via IP obtida:", data);
+      } else {
+        throw new Error("API retornou status de erro");
+      }
+    } catch (error) {
+      console.error("Erro ao obter localização via IP:", error);
+
+      // Fallback para São Paulo como último recurso
+      const defaultLocation = {
+        latitude: -23.5505,
+        longitude: -46.6333,
+        source: "ip" as const,
+        city: "São Paulo",
+        region: "São Paulo",
+        country: "Brasil",
+      };
+
+      setLocation(defaultLocation);
+
+      toast({
+        title: "Localização padrão definida",
+        description:
+          "Não foi possível detectar sua localização. Usando São Paulo, SP como padrão.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleGetLocation = () => {
     setLocationLoading(true);
 
@@ -105,53 +187,55 @@ export default function RegisterPage() {
           setLocation({
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
+            source: "gps",
           });
           setLocationLoading(false);
           toast({
-            title: "Localização detectada",
-            description: "Sua localização atual foi detectada com sucesso.",
+            title: "Localização GPS detectada",
+            description: "Sua localização precisa foi detectada via GPS.",
           });
         },
-        (error) => {
-          const defaultLocation = {
-            latitude: -23.5505,
-            longitude: -46.6333,
-          };
-          setLocation(defaultLocation);
+        async (error) => {
           console.error(
-            "Erro ao obter localização:",
+            "Erro ao obter localização GPS:",
             "Code =",
             error.code,
             "| Message =",
             error.message
           );
 
-          setLocationLoading(false);
-
-          let errorMessage = "Não foi possível obter sua localização.";
+          let errorMessage = "GPS indisponível. ";
 
           switch (error.code) {
             case 1:
-              errorMessage =
-                "Permissão negada para acessar localização. Por favor, permita o acesso nas configurações do navegador.";
+              errorMessage +=
+                "Permissão negada. Tentando localização via IP...";
               break;
             case 2:
-              errorMessage =
-                "Informação de localização indisponível. Tente novamente mais tarde.";
+              errorMessage +=
+                "Informação indisponível. Tentando localização via IP...";
               break;
             case 3:
-              errorMessage =
-                "Tempo para obter localização esgotado. Tente novamente.";
+              errorMessage += "Tempo esgotado. Tentando localização via IP...";
               break;
             default:
-              errorMessage = "Erro desconhecido ao obter localização.";
+              errorMessage +=
+                "Erro desconhecido. Tentando localização via IP...";
           }
 
           toast({
-            title: "Erro de localização",
+            title: "Fallback para IP",
             description: errorMessage,
-            variant: "destructive",
           });
+
+          // Tentar obter localização via IP como fallback
+          try {
+            await getLocationByIP();
+          } catch (ipError) {
+            console.error("Erro no fallback IP:", ipError);
+          } finally {
+            setLocationLoading(false);
+          }
         },
         {
           enableHighAccuracy: true,
@@ -160,11 +244,17 @@ export default function RegisterPage() {
         }
       );
     } else {
-      setLocationLoading(false);
+      console.log("Geolocalização não suportada, usando IP...");
+
       toast({
-        title: "Geolocalização não suportada",
-        description: "Seu navegador não suporta geolocalização.",
-        variant: "destructive",
+        title: "GPS não suportado",
+        description:
+          "Seu navegador não suporta GPS. Detectando localização via IP...",
+      });
+
+      // Se geolocalização não é suportada, usar IP diretamente
+      getLocationByIP().finally(() => {
+        setLocationLoading(false);
       });
     }
   };
@@ -459,30 +549,79 @@ export default function RegisterPage() {
                     </>
                   ) : (
                     <>
-                      <MapPin className="mr-2 h-4 w-4" />
+                      {location?.source === "gps" ? (
+                        <MapPin className="mr-2 h-4 w-4" />
+                      ) : (
+                        <Globe className="mr-2 h-4 w-4" />
+                      )}
                       {location
                         ? "Atualizar Localização"
-                        : "Compartilhar Minha Localização"}
+                        : "Detectar Minha Localização"}
                     </>
                   )}
                 </Button>
 
                 {location && (
-                  <div className="p-3 bg-green-50 rounded-lg border border-green-200">
-                    <div className="flex items-center text-green-700">
-                      <MapPin className="h-4 w-4 mr-2" />
-                      <span className="font-medium">Localização detectada</span>
+                  <div
+                    className={`p-3 rounded-lg border ${
+                      location.source === "gps"
+                        ? "bg-green-50 border-green-200"
+                        : "bg-blue-50 border-blue-200"
+                    }`}
+                  >
+                    <div
+                      className={`flex items-center ${
+                        location.source === "gps"
+                          ? "text-green-700"
+                          : "text-blue-700"
+                      }`}
+                    >
+                      {location.source === "gps" ? (
+                        <MapPin className="h-4 w-4 mr-2" />
+                      ) : (
+                        <Globe className="h-4 w-4 mr-2" />
+                      )}
+                      <span className="font-medium">
+                        {location.source === "gps"
+                          ? "Localização GPS detectada"
+                          : "Localização aproximada (via IP)"}
+                      </span>
                     </div>
-                    <p className="text-sm text-green-600 mt-1">
-                      Coordenadas: {location.latitude.toFixed(6)},{" "}
-                      {location.longitude.toFixed(6)}
+                    <p
+                      className={`text-sm mt-1 ${
+                        location.source === "gps"
+                          ? "text-green-600"
+                          : "text-blue-600"
+                      }`}
+                    >
+                      {location.city && location.region && location.country ? (
+                        <>
+                          {location.city}, {location.region}, {location.country}
+                          <br />
+                          <span className="text-xs">
+                            Coordenadas: {location.latitude.toFixed(6)},{" "}
+                            {location.longitude.toFixed(6)}
+                          </span>
+                        </>
+                      ) : (
+                        `Coordenadas: ${location.latitude.toFixed(
+                          6
+                        )}, ${location.longitude.toFixed(6)}`
+                      )}
                     </p>
+                    {location.source === "ip" && (
+                      <p className="text-xs text-blue-500 mt-1">
+                        💡 Para maior precisão, permita o acesso ao GPS nas
+                        configurações do navegador
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
               <p className="text-xs text-gray-500">
                 Sua localização será usada para conectar você com
-                desenvolvedores próximos.
+                desenvolvedores próximos. O sistema tentará usar GPS primeiro e,
+                se não disponível, usará sua localização aproximada via IP.
               </p>
             </div>
 
@@ -509,6 +648,19 @@ export default function RegisterPage() {
                   </div>
                   <div>
                     <strong>Longitude:</strong> {location.longitude.toFixed(6)}
+                  </div>
+                  <div className="text-xs mt-2 flex items-center">
+                    {location.source === "gps" ? (
+                      <>
+                        <MapPin className="h-3 w-3 mr-1" />
+                        Localização precisa via GPS
+                      </>
+                    ) : (
+                      <>
+                        <Globe className="h-3 w-3 mr-1" />
+                        Localização aproximada via IP
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
