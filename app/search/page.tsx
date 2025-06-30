@@ -13,7 +13,6 @@ import {
   Search,
   Loader2,
   AlertCircle,
-  Wifi,
   WifiOff,
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
@@ -104,7 +103,6 @@ export default function SearchPage() {
     setLocationLoading(true);
     setError(null);
 
-    // Função para usar localização padrão
     const useDefaultLocation = () => {
       const defaultLocation = {
         latitude: -23.5505,
@@ -114,7 +112,6 @@ export default function SearchPage() {
       handleSearch(defaultLocation);
     };
 
-    // Função para tentar obter localização por IP usando API Route
     const tryIPLocationViaAPI = async () => {
       try {
         console.log("Tentando localização via API interna...");
@@ -144,13 +141,10 @@ export default function SearchPage() {
       return false;
     };
 
-    // Função para tentar obter localização por IP (fallback)
     const tryIPLocation = async () => {
-      // Primeiro tenta via API interna (sem CORS)
       const apiSuccess = await tryIPLocationViaAPI();
       if (apiSuccess) return true;
 
-      // Fallback para serviços externos (podem ter CORS)
       const ipServices = [
         {
           name: "ip-api direct",
@@ -203,7 +197,6 @@ export default function SearchPage() {
       return false;
     };
 
-    // Verifica se a API está disponível
     if (!navigator.geolocation) {
       setLocationLoading(false);
       setError("Geolocalização não é suportada pelo seu navegador.");
@@ -217,22 +210,21 @@ export default function SearchPage() {
       return;
     }
 
-    // Primeira tentativa com configurações de alta precisão
     const highAccuracyOptions = {
       enableHighAccuracy: true,
       timeout: 10000,
       maximumAge: 60000,
     };
 
-    // Segunda tentativa com configurações menos rigorosas
     const lowAccuracyOptions = {
       enableHighAccuracy: false,
       timeout: 15000,
       maximumAge: 300000,
     };
 
-    // Função de sucesso
-    const onSuccess = (position) => {
+    const onSuccess = (position: {
+      coords: { latitude: any; longitude: any };
+    }) => {
       console.log("Localização GPS obtida:", position);
       const location = {
         latitude: position.coords.latitude,
@@ -243,19 +235,15 @@ export default function SearchPage() {
       handleSearch(location);
     };
 
-    // Função para segunda tentativa
     const tryLowAccuracy = () => {
       console.log("Tentando com baixa precisão...");
       navigator.geolocation.getCurrentPosition(
         onSuccess,
         async (error) => {
           console.error("Segunda tentativa falhou:", error);
-          // setLocationLoading(false);
 
-          // Tenta localização por IP como último recurso
           const ipSuccess = await tryIPLocation();
           if (!ipSuccess) {
-            // Se tudo falhar, usa localização padrão
             setError("Não foi possível obter sua localização precisa.");
             toast({
               title: "Erro de localização",
@@ -271,8 +259,12 @@ export default function SearchPage() {
       );
     };
 
-    // Primeira tentativa com alta precisão
-    const onError = async (error) => {
+    const onError = async (error: {
+      code: any;
+      PERMISSION_DENIED: any;
+      POSITION_UNAVAILABLE: any;
+      TIMEOUT: any;
+    }) => {
       console.error("Primeira tentativa falhou:", error);
 
       let errorMessage = "Erro desconhecido ao obter localização.";
@@ -281,7 +273,7 @@ export default function SearchPage() {
       switch (error.code) {
         case error.PERMISSION_DENIED:
           errorMessage = "Permissão negada pelo usuário.";
-          shouldTryFallback = false; // Não adianta tentar novamente
+          shouldTryFallback = false;
           break;
         case error.POSITION_UNAVAILABLE:
           errorMessage =
@@ -295,11 +287,8 @@ export default function SearchPage() {
       console.log(errorMessage);
 
       if (shouldTryFallback && error.code !== error.PERMISSION_DENIED) {
-        // Tenta segunda vez com configurações menos rigorosas
         tryLowAccuracy();
       } else {
-        // Se foi negação de permissão, tenta localização por IP
-        // setLocationLoading(false);
         const ipSuccess = await tryIPLocation();
         if (!ipSuccess) {
           setError("Acesso à localização foi negado.");
@@ -315,7 +304,6 @@ export default function SearchPage() {
       }
     };
 
-    // Inicia primeira tentativa
     console.log("Iniciando primeira tentativa de geolocalização...");
     navigator.geolocation.getCurrentPosition(
       onSuccess,
@@ -324,7 +312,6 @@ export default function SearchPage() {
     );
   };
 
-  // Função para verificar se o dispositivo suporta GPS
   const checkGPSCapability = () => {
     const isMobile =
       /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
@@ -343,7 +330,6 @@ export default function SearchPage() {
     };
   };
 
-  // Função para diagnóstico completo
   const diagnosticGeolocation = () => {
     const capability = checkGPSCapability();
 
@@ -440,32 +426,18 @@ export default function SearchPage() {
 
   return (
     <div className="container mx-auto py-6 px-4">
-      <div className="flex justify-between items-center mb-6">
-        <div className="flex items-center gap-6">
-          <h1 className="text-2xl font-bold">Encontrar Desenvolvedores</h1>
-          <NavLinks />
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            {apiStatus === "checking" ? (
-              <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
-            ) : apiStatus === "online" ? (
-              <Wifi className="h-4 w-4 text-green-500" />
-            ) : (
-              <WifiOff className="h-4 w-4 text-red-500" />
-            )}
-            <span className="text-sm text-gray-500">
-              API{" "}
-              {apiStatus === "checking"
-                ? "verificando..."
-                : apiStatus === "online"
-                ? "online"
-                : "offline"}
-            </span>
+      <header>
+        <div className="container flex h-16 items-center justify-between px-4 md:px-6">
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-2">
+              <MapPin className="h-6 w-6 text-purple-600" />
+              <span className="text-xl font-bold">DevRadar</span>
+            </div>
+            <NavLinks />
           </div>
           <UserMenu />
         </div>
-      </div>
+      </header>
 
       {error && (
         <Alert variant="destructive" className="mb-6">

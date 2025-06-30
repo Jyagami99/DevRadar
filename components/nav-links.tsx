@@ -27,7 +27,8 @@ export function NavLinks() {
     debugLinks.push({ href: "/debug", label: "Debug" });
   }
 
-  const allLinks = [...baseLinks, ...conditionalLinks, ...debugLinks];
+  // const allLinks = [...baseLinks, ...conditionalLinks, ...debugLinks];
+  const allLinks = [...baseLinks, ...conditionalLinks];
 
   return (
     <nav className="flex items-center space-x-4 lg:space-x-6">

@@ -34,6 +34,8 @@ import {
   type Developer,
   type ApiError,
 } from "@/lib/api";
+import { UserMenu } from "@/components/user-menu";
+import { NavLinks } from "@/components/nav-links";
 
 interface LocationData {
   latitude: number;
@@ -89,7 +91,7 @@ export default function ProfilePage() {
       setLocation({
         latitude: devProfile.latitude,
         longitude: devProfile.longitude,
-        source: "database", // Dados vindos do banco de dados
+        source: "database",
       });
 
       console.log("Perfil carregado:", devProfile);
@@ -387,6 +389,18 @@ export default function ProfilePage() {
 
   return (
     <div className="container mx-auto py-10 px-4 max-w-3xl">
+      <header>
+        <div className="container flex h-16 items-center justify-between px-4 md:px-6">
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-2">
+              <MapPin className="h-6 w-6 text-purple-600" />
+              <span className="text-xl font-bold">DevRadar</span>
+            </div>
+            <NavLinks />
+          </div>
+          <UserMenu />
+        </div>
+      </header>
       <div className="grid gap-6 md:grid-cols-3">
         <div className="md:col-span-1">
           <Card>
