@@ -25,6 +25,7 @@ import {
   Save,
   RefreshCw,
   Globe,
+  Home,
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import {
@@ -344,6 +345,10 @@ export default function ProfilePage() {
     }
   };
 
+  const handleGoHome = () => {
+    router.push("/");
+  };
+
   if (status === "loading" || loadingProfile) {
     return (
       <div className="container mx-auto py-10 px-4 max-w-md flex items-center justify-center">
@@ -424,6 +429,12 @@ export default function ProfilePage() {
                 )}
               </div>
             </CardContent>
+            <div className="p-6 pt-2">
+              <Button variant="outline" onClick={handleGoHome}>
+                <Home className="mr-2 h-4 w-4" />
+                Voltar para Home
+              </Button>
+            </div>
           </Card>
         </div>
 
