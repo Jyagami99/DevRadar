@@ -229,16 +229,29 @@ export async function getDeveloperByUsername(
 ): Promise<Developer> {
   try {
     console.log(`Buscando desenvolvedor por username: ${github_username}`);
-
     const response = await api.get<Developer>(
       `/devs/username/${github_username}`
     );
 
-    console.log("Desenvolvedor encontrado:", response.data);
+    console.log("Resposta da API:", response.data);
 
+    if (!response.data || Object.keys(response.data).length === 0) {
+      console.log("Desenvolvedor não encontrado - resposta vazia");
+      throw {
+        message: "Desenvolvedor não encontrado",
+        status: 404,
+        details: "Resposta vazia da API",
+      } as ApiError;
+    }
+
+    console.log("Desenvolvedor encontrado:", response.data);
     return response.data;
   } catch (error) {
     console.error("Erro ao buscar desenvolvedor:", error);
+
+    if (error && typeof error === "object" && "status" in error) {
+      throw error;
+    }
 
     if (axios.isAxiosError(error)) {
       const apiError: ApiError = {
@@ -247,7 +260,6 @@ export async function getDeveloperByUsername(
         status: error.response?.status || 0,
         details: error.response?.data,
       };
-
       throw apiError;
     }
 
