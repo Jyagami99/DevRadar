@@ -1,5 +1,4 @@
 "use client";
-
 import { useSession, signOut } from "next-auth/react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -15,6 +14,28 @@ import { LogOut, User, MapPin } from "lucide-react";
 
 export function UserMenu() {
   const { data: session, status } = useSession();
+
+  const handleSignOut = async () => {
+    try {
+      localStorage.clear();
+
+      sessionStorage.clear();
+
+      document.cookie.split(";").forEach((cookie) => {
+        const eqPos = cookie.indexOf("=");
+        const name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie;
+        document.cookie = `${name.trim()}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
+      });
+
+      await signOut({
+        callbackUrl: "/",
+        redirect: true,
+      });
+    } catch (error) {
+      console.error("Erro ao fazer logout:", error);
+      signOut({ callbackUrl: "/" });
+    }
+  };
 
   if (status === "loading") {
     return (
@@ -73,7 +94,7 @@ export function UserMenu() {
           className="cursor-pointer"
           onSelect={(event) => {
             event.preventDefault();
-            signOut({ callbackUrl: "/" });
+            handleSignOut();
           }}
         >
           <LogOut className="mr-2 h-4 w-4" />
