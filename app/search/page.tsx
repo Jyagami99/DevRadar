@@ -50,7 +50,9 @@ export default function SearchPage() {
     longitude: number;
   } | null>(null);
   const [locationLoading, setLocationLoading] = useState<boolean>(false);
-  const [filteredDevelopers, setFilteredDevelopers] = useState<DeveloperWithDistance[]>([]);
+  const [filteredDevelopers, setFilteredDevelopers] = useState<
+    DeveloperWithDistance[]
+  >([]);
   const [error, setError] = useState<string | null>(null);
   const [apiStatus, setApiStatus] = useState<"checking" | "online" | "offline">(
     "checking"
@@ -102,39 +104,107 @@ export default function SearchPage() {
     setLocationLoading(true);
     setError(null);
 
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const location = {
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-          };
-          setUserLocation(location);
-          setLocationLoading(false);
+    // Função para usar localização padrão
+    const useDefaultLocation = () => {
+      const defaultLocation = {
+        latitude: -23.5505,
+        longitude: -46.6333,
+      };
+      setUserLocation(defaultLocation);
+      handleSearch(defaultLocation);
+    };
 
-          handleSearch(location);
-        },
-        (error) => {
-          console.error("Erro ao obter localização:", error);
-          setLocationLoading(false);
-          setError(
-            "Não foi possível obter sua localização. Verifique as permissões do navegador."
-          );
-          toast({
-            title: "Erro de localização",
-            description:
-              "Não foi possível obter sua localização. Usando localização padrão (São Paulo).",
-            variant: "destructive",
-          });
-          const defaultLocation = {
-            latitude: -23.5505,
-            longitude: -46.6333,
+    // Função para tentar obter localização por IP usando API Route
+    const tryIPLocationViaAPI = async () => {
+      try {
+        console.log("Tentando localização via API interna...");
+        const response = await fetch("/api/location");
+        const data = await response.json();
+
+        if (data.latitude && data.longitude) {
+          const location = {
+            latitude: data.latitude,
+            longitude: data.longitude,
           };
-          setUserLocation(defaultLocation);
-          handleSearch(defaultLocation);
+
+          console.log("Localização obtida via API:", location);
+          setUserLocation(location);
+          handleSearch(location);
+
+          toast({
+            title: "Localização aproximada",
+            description: `Localização baseada no IP (${data.city}, ${data.country}) - menos precisa que GPS.`,
+            variant: "default",
+          });
+          return true;
         }
-      );
-    } else {
+      } catch (error) {
+        console.error("Erro na API de localização:", error);
+      }
+      return false;
+    };
+
+    // Função para tentar obter localização por IP (fallback)
+    const tryIPLocation = async () => {
+      // Primeiro tenta via API interna (sem CORS)
+      const apiSuccess = await tryIPLocationViaAPI();
+      if (apiSuccess) return true;
+
+      // Fallback para serviços externos (podem ter CORS)
+      const ipServices = [
+        {
+          name: "ip-api direct",
+          getLocation: async () => {
+            const response = await fetch("http://ip-api.com/json/");
+            const data = await response.json();
+
+            if (data.status === "success") {
+              return {
+                latitude: data.lat,
+                longitude: data.lon,
+                city: data.city,
+                country: data.country,
+              };
+            }
+            return null;
+          },
+        },
+      ];
+
+      for (const service of ipServices) {
+        try {
+          console.log(`Tentando ${service.name}...`);
+          const locationData = await service.getLocation();
+
+          if (locationData) {
+            const location = {
+              latitude: locationData.latitude,
+              longitude: locationData.longitude,
+            };
+
+            console.log(`Localização obtida via ${service.name}:`, location);
+            setUserLocation(location);
+            handleSearch(location);
+
+            toast({
+              title: "Localização aproximada",
+              description: `Localização baseada no IP (${locationData.city}, ${locationData.country}) - menos precisa que GPS.`,
+              variant: "default",
+            });
+            return true;
+          }
+        } catch (error) {
+          console.error(`Erro com ${service.name}:`, error);
+          continue;
+        }
+      }
+
+      console.error("Todos os serviços de localização por IP falharam");
+      return false;
+    };
+
+    // Verifica se a API está disponível
+    if (!navigator.geolocation) {
       setLocationLoading(false);
       setError("Geolocalização não é suportada pelo seu navegador.");
       toast({
@@ -143,12 +213,154 @@ export default function SearchPage() {
           "Seu navegador não suporta geolocalização. Usando localização padrão.",
         variant: "destructive",
       });
-      const defaultLocation = {
-        latitude: -23.5505,
-        longitude: -46.6333,
+      useDefaultLocation();
+      return;
+    }
+
+    // Primeira tentativa com configurações de alta precisão
+    const highAccuracyOptions = {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 60000,
+    };
+
+    // Segunda tentativa com configurações menos rigorosas
+    const lowAccuracyOptions = {
+      enableHighAccuracy: false,
+      timeout: 15000,
+      maximumAge: 300000,
+    };
+
+    // Função de sucesso
+    const onSuccess = (position) => {
+      console.log("Localização GPS obtida:", position);
+      const location = {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
       };
-      setUserLocation(defaultLocation);
-      handleSearch(defaultLocation);
+      setUserLocation(location);
+      setLocationLoading(false);
+      handleSearch(location);
+    };
+
+    // Função para segunda tentativa
+    const tryLowAccuracy = () => {
+      console.log("Tentando com baixa precisão...");
+      navigator.geolocation.getCurrentPosition(
+        onSuccess,
+        async (error) => {
+          console.error("Segunda tentativa falhou:", error);
+          // setLocationLoading(false);
+
+          // Tenta localização por IP como último recurso
+          const ipSuccess = await tryIPLocation();
+          if (!ipSuccess) {
+            // Se tudo falhar, usa localização padrão
+            setError("Não foi possível obter sua localização precisa.");
+            toast({
+              title: "Erro de localização",
+              description:
+                "Usando localização padrão (São Paulo). Verifique se o GPS está ativado.",
+              variant: "destructive",
+            });
+            useDefaultLocation();
+          }
+          setLocationLoading(false);
+        },
+        lowAccuracyOptions
+      );
+    };
+
+    // Primeira tentativa com alta precisão
+    const onError = async (error) => {
+      console.error("Primeira tentativa falhou:", error);
+
+      let errorMessage = "Erro desconhecido ao obter localização.";
+      let shouldTryFallback = true;
+
+      switch (error.code) {
+        case error.PERMISSION_DENIED:
+          errorMessage = "Permissão negada pelo usuário.";
+          shouldTryFallback = false; // Não adianta tentar novamente
+          break;
+        case error.POSITION_UNAVAILABLE:
+          errorMessage =
+            "Localização não disponível. Tentando com configurações diferentes...";
+          break;
+        case error.TIMEOUT:
+          errorMessage = "Timeout na primeira tentativa. Tentando novamente...";
+          break;
+      }
+
+      console.log(errorMessage);
+
+      if (shouldTryFallback && error.code !== error.PERMISSION_DENIED) {
+        // Tenta segunda vez com configurações menos rigorosas
+        tryLowAccuracy();
+      } else {
+        // Se foi negação de permissão, tenta localização por IP
+        // setLocationLoading(false);
+        const ipSuccess = await tryIPLocation();
+        if (!ipSuccess) {
+          setError("Acesso à localização foi negado.");
+          toast({
+            title: "Permissão negada",
+            description:
+              "Para usar sua localização, permita o acesso nas configurações do navegador.",
+            variant: "destructive",
+          });
+          useDefaultLocation();
+        }
+        setLocationLoading(false);
+      }
+    };
+
+    // Inicia primeira tentativa
+    console.log("Iniciando primeira tentativa de geolocalização...");
+    navigator.geolocation.getCurrentPosition(
+      onSuccess,
+      onError,
+      highAccuracyOptions
+    );
+  };
+
+  // Função para verificar se o dispositivo suporta GPS
+  const checkGPSCapability = () => {
+    const isMobile =
+      /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+        navigator.userAgent
+      );
+    const isSecureContext = window.isSecureContext;
+
+    console.log("Dispositivo móvel:", isMobile);
+    console.log("Contexto seguro (HTTPS):", isSecureContext);
+    console.log("Geolocalização disponível:", "geolocation" in navigator);
+
+    return {
+      isMobile,
+      isSecureContext,
+      hasGeolocation: "geolocation" in navigator,
+    };
+  };
+
+  // Função para diagnóstico completo
+  const diagnosticGeolocation = () => {
+    const capability = checkGPSCapability();
+
+    console.log("=== DIAGNÓSTICO DE GEOLOCALIZAÇÃO ===");
+    console.log("URL atual:", window.location.href);
+    console.log("Protocolo:", window.location.protocol);
+    console.log("Capabilities:", capability);
+
+    if (
+      !capability.isSecureContext &&
+      window.location.hostname !== "localhost"
+    ) {
+      console.warn("⚠️ AVISO: Geolocalização requer HTTPS em produção!");
+    }
+
+    if (!capability.isMobile) {
+      console.warn("⚠️ Desktop: Localização pode ser menos precisa");
     }
   };
 
